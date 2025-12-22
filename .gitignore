@@ -1,0 +1,36 @@
+# Python genel
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Veri Setleri (Büyük dosyaları git'e atma)
+*.csv
+*.xlsx
+sep28k-mfcc.csv
+archive/
+
+# Proje Çıktıları ve Grafikler
+*.png
+*.jpg
+*.jpeg
+training_history.png
+confusion_matrix.png
+model_checkpoints/
+saved_models/
+
+# IDE ve Editör dosyaları
+.vscode/
+.idea/
+*.swp
+
+# İşletim Sistemi dosyaları
+.DS_Store
+Thumbs.db
