@@ -55,6 +55,33 @@ class_counts = df_clean['is_stutter'].value_counts()
 print(f"   Sınıf Dağılımı:\n{class_counts}")
 print(f"   0: Fluent (Akıcı), 1: Stutter (Kekemelik)")
 
+# 2.5 VERİ DENGELEME (CRITICAL STEP)
+print("\n2.5. Veri Dengeleniyor (Undersampling)...")
+# Sınıfları ayır
+df_fluent = df_clean[df_clean['is_stutter'] == 0]
+df_stutter = df_clean[df_clean['is_stutter'] == 1]
+
+count_fluent = len(df_fluent)
+count_stutter = len(df_stutter)
+
+print(f"   Orijinal Sayılar -> Fluent: {count_fluent}, Stutter: {count_stutter}")
+
+# Az olan sınıfın sayısını bul
+min_count = min(count_fluent, count_stutter)
+
+# Her iki sınıftan da eşit sayıda (az olan kadar) örnek al
+df_fluent_under = df_fluent.sample(min_count, random_state=42)
+df_stutter_under = df_stutter.sample(min_count, random_state=42)
+
+# Birleştir ve karıştır
+df_balanced = pd.concat([df_fluent_under, df_stutter_under], axis=0)
+df_balanced = df_balanced.sample(frac=1, random_state=42).reset_index(drop=True)
+
+print(f"   Dengelenmiş Sayılar -> Fluent: {len(df_balanced[df_balanced['is_stutter']==0])}, Stutter: {len(df_balanced[df_balanced['is_stutter']==1])}")
+
+# Artık df_clean yerine df_balanced kullanacağız
+df_clean = df_balanced
+
 # 3. ÖZELLİK SEÇİMİ (FEATURE SELECTION)
 print("\n3. Özellikler Seçiliyor...")
 # MFCC özellikleri: 0'dan 12'ye kadar olan sütunlar
