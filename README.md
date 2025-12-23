@@ -1,6 +1,6 @@
 # Stuttering Detection (Kekemelik Tespiti)
 
-Bu proje, ses verilerinden elde edilen MFCC (Mel-Frequency Cepstral Coefficients) özelliklerini kullanarak kekemelik tespiti yapan bir Derin Öğrenme (Deep Learning) modelidir. Bitirme projesi kapsamında geliştirilmiştir ve **SEP-28k** veri setini temel alır.
+Bu proje, ses verilerinden elde edilen MFCC (Mel-Frequency Cepstral Coefficients) özelliklerini kullanarak kekemelik tespiti yapan bir Makine Öğrenmesi (Machine Learning) modelidir. Bitirme projesi kapsamında geliştirilmiştir ve **SEP-28k** veri setini temel alır.
 
 ## 🎯 Proje Amacı
 
@@ -23,15 +23,14 @@ Bu projede aşağıdaki kütüphaneler ve yöntemler kullanılmıştır:
 *   **Pandas:** Veri manipülasyonu, CSV okuma ve veri temizleme işlemleri için.
 *   **NumPy:** Sayısal işlemler ve dizi (array) manipülasyonları için.
 *   **Scikit-Learn:**
+    *   `RandomForestClassifier`: Sınıflandırma modeli olarak kullanılmıştır.
     *   `train_test_split`: Veriyi eğitim ve test setlerine ayırmak için.
-    *   `StandardScaler`: Veriyi normalize etmek (ölçeklendirmek) için. Yapay sinir ağlarının daha hızlı ve kararlı öğrenmesi için giriş verileri standartlaştırılmıştır.
     *   `Metrics`: Model başarısını ölçmek (Confusion Matrix, Classification Report) için.
-*   **TensorFlow / Keras:** Derin öğrenme modelini oluşturmak için.
-    *   **Model Mimarisi:** Feed-Forward Neural Network (İleri Beslemeli Sinir Ağı).
-    *   **Dense Layers:** Tam bağlantılı katmanlar.
-    *   **Dropout:** Overfitting'i (aşırı öğrenme) engellemek için rastgele nöron kapatma.
-    *   **Sigmoid Aktivasyonu:** Çıkış katmanında 0 ile 1 arasında bir olasılık değeri üretmek için (Binary Classification).
-*   **Matplotlib & Seaborn:** Eğitim sonuçlarını (Accuracy/Loss grafikleri) ve Confusion Matrix'i görselleştirmek için.
+*   **Imbalanced-Learn (SMOTE):**
+    *   Veri setindeki sınıf dengesizliğini gidermek için **SMOTE (Synthetic Minority Over-sampling Technique)** kullanılmıştır. Bu yöntem, azınlık sınıfını sentetik olarak çoğaltarak modelin yanlı (biased) öğrenmesini engeller.
+*   **Librosa & PyAudio:** Ses işleme ve kayıt işlemleri için.
+*   **Joblib:** Eğitilen modeli kaydetmek ve yüklemek için.
+*   **Matplotlib & Seaborn:** Sonuçları görselleştirmek için.
 
 ## 🚀 Kurulum ve Çalıştırma
 
@@ -39,22 +38,40 @@ Bu projede aşağıdaki kütüphaneler ve yöntemler kullanılmıştır:
 2.  Gerekli Python kütüphanelerini yükleyin:
 
 ```bash
-pip install pandas numpy matplotlib seaborn scikit-learn tensorflow
+pip install pandas numpy matplotlib seaborn scikit-learn imbalanced-learn librosa pyaudio joblib
 ```
 
-3.  `sep28k-mfcc.csv` dosyasını proje dizinine yerleştirin.
-4.  Modeli eğitmek ve test etmek için aşağıdaki komutu çalıştırın:
+**Not:** `pyaudio` kurulumunda hata alırsanız, işletim sisteminize uygun `PyAudio` wheel dosyasını indirip kurmanız gerekebilir veya `pipwin install pyaudio` deneyebilirsiniz.
+
+3.  `sep28k-mfcc.csv` dosyasını proje ana dizinine yerleştirin.
+
+### Adım 1: Modeli Eğitme
+
+Canlı tespit sistemi `live-detection` klasörü altında çalışmaktadır. Önce bu klasöre girip modeli eğitmelisiniz:
 
 ```bash
-python stutter_detection.py
+cd live-detection
+python train_model.py
 ```
+Bu işlem, ana dizindeki veri setini okuyacak ve `live-detection` klasörü içinde `stutter_rf_model.pkl` ve `scaler.pkl` dosyalarını oluşturacaktır.
+
+### Adım 2: Ses Analizi (Canlı Kayıt)
+
+Model eğitildikten sonra, yine `live-detection` klasörü içindeyken mikrofonunuzu kullanarak analiz yapabilirsiniz:
+
+```bash
+python audio_analyzer.py
+```
+Bu script, varsayılan olarak 10 saniyelik bir ses kaydı alır (kod içinden değiştirilebilir), bunu 3'er saniyelik parçalara böler ve her parça için kekemelik analizi yapar.
 
 ## 📊 Çıktılar
 
-Kod çalıştırıldığında:
-1.  Konsolda modelin eğitim süreci ve test sonuçları (Accuracy, Precision, Recall, F1-Score) görüntülenir.
-2.  **`training_history.png`**: Eğitim ve doğrulama (validation) setleri üzerindeki Accuracy ve Loss değişimlerini gösteren grafik kaydedilir.
-3.  **`confusion_matrix.png`**: Modelin tahminlerinin doğruluğunu gösteren karmaşıklık matrisi kaydedilir.
+*   **Eğitim:** Accuracy, Precision, Recall, F1-Score metrikleri ve grafikler.
+*   **Analiz:** Zaman damgalı (Timestamped) kekemelik çizelgesi. Örn:
+    ```text
+    0.0s - 3.0s   | AKICI           | %85.0
+    3.0s - 6.0s   | KEKEMELİK       | %72.4
+    ```
 
 ## 📝 Lisans
 

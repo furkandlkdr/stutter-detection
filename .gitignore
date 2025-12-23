@@ -17,6 +17,10 @@ pip-delete-this-directory.txt
 sep28k-mfcc.csv
 archive/
 
+# Modeller ve Ses Kayıtları
+*.pkl
+*.wav
+
 # Proje Çıktıları ve Grafikler
 *.png
 *.jpg
