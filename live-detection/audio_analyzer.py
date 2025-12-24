@@ -12,7 +12,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class AudioRecorder:
-    def __init__(self, rate=22050, chunk=1024, channels=1):
+    def __init__(self, rate=16000, chunk=1024, channels=1):
         self.rate = rate
         self.chunk = chunk
         self.channels = channels
@@ -43,7 +43,7 @@ class AudioRecorder:
             # Geri sayım göstergesi (her saniye)
             if i % int(self.rate / self.chunk) == 0:
                 remaining = duration - int(i / (self.rate / self.chunk))
-                print(f"   Kalan Süre: {remaining} sn", end='\r')
+                print(f"   Kalan Süre: {remaining} sn ", end='\r')
 
         print("\n✅ Kayıt Tamamlandı.")
 
@@ -72,7 +72,7 @@ class StutterDetector:
         print("\n🧠 Model ve Scaler Yükleniyor...")
         self.model = joblib.load(model_path)
         self.scaler = joblib.load(scaler_path)
-        self.sample_rate = 22050 # Model eğitimi ve analiz için standart SR
+        self.sample_rate = 16000 # Model eğitimi ve analiz için standart SR (SEP-28k)
         print("   Model yüklendi.")
 
     def extract_features(self, y, sr):
@@ -83,7 +83,7 @@ class StutterDetector:
         # 13 MFCC katsayısı çıkar
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
         # Zaman ekseni boyunca ortalamasını al (13, T) -> (13,)
-        mfcc_mean = np.mean(mfcc.T, axis=0)
+        mfcc_mean = np.mean(mfcc, axis=1)
         return mfcc_mean
 
     def analyze_file(self, file_path, chunk_duration=3):
@@ -106,6 +106,20 @@ class StutterDetector:
             
             # Çok kısa parçaları atla (< 1 saniye)
             if len(chunk) < sr:
+                continue
+            
+            # Sessizlik kontrolü (Noise Gate)
+            rms = np.sqrt(np.mean(chunk**2))
+            if rms < 0.005: # Eşik değeri
+                start_time = i / sr
+                end_time = (i + len(chunk)) / sr
+                results.append({
+                    "start_time": round(start_time, 2),
+                    "end_time": round(end_time, 2),
+                    "is_stutter": 0,
+                    "confidence": 1.0,
+                    "label": "SESSİZ/AKICI"
+                })
                 continue
                 
             # Özellik Çıkarımı
