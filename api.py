@@ -18,7 +18,6 @@ from typing import Optional
 import joblib
 import librosa
 import numpy as np
-import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -43,9 +42,9 @@ class UTF8JSONResponse(JSONResponse):
 # --- Sabitler --------------------------------------------------------------
 
 ROOT_DIR = Path(__file__).resolve().parent
-LIVE_DIR = ROOT_DIR / "live-detection"
-MODEL_PATH = LIVE_DIR / "stutter_rf_model.pkl"
-SCALER_PATH = LIVE_DIR / "scaler.pkl"
+MODELS_DIR = ROOT_DIR / "models"
+MODEL_PATH = MODELS_DIR / "stutter_rf_model.pkl"
+SCALER_PATH = MODELS_DIR / "scaler.pkl"
 SAMPLE_RATE = 16000
 CHUNK_DURATION = 3
 NOISE_GATE_RMS = 0.005

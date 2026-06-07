@@ -1,18 +1,28 @@
+"""VoxCeleb WAV'larından 13 MFCC ortalaması çıkarıp akıcı veri seti üretir.
+
+Librosa/scipy yerine saf numpy kullanıldı; ortamda _fblas DLL sorunu olsa da
+script çalışır. Çıktı: data/fluent_mfcc.csv (is_stutter=0).
+
+Kullanım:
+    python scripts/prepare_fluent_data.py
+    python scripts/prepare_fluent_data.py --target-samples 5000
+"""
+
 from __future__ import annotations
 
 import argparse
 import csv
 import math
-import wave
 import random
+import wave
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-
 TARGET_COLUMNS = [str(i) for i in range(13)] + ["is_stutter"]
 
+# MFCC parametreleri (eğitimdeki sabitlerle aynı)
 N_MFCC = 13
 N_MELS = 26
 N_FFT = 1024
@@ -66,7 +76,7 @@ def frame_audio(audio: np.ndarray, frame_length: int, hop_length: int) -> np.nda
 
     for index in range(frame_count):
         start = index * hop_length
-        frames[index] = audio[start:start + frame_length]
+        frames[index] = audio[start : start + frame_length]
 
     return frames
 
@@ -101,18 +111,22 @@ def build_mel_filterbank(sample_rate: int, n_fft: int, n_mels: int) -> np.ndarra
 
 
 def extract_mfcc_mean(audio: np.ndarray, sample_rate: int) -> np.ndarray:
+    # Pre-emphasis + framing + Hamming penceresi
     emphasized = np.append(audio[0], audio[1:] - PRE_EMPHASIS * audio[:-1])
     frames = frame_audio(emphasized, WIN_LENGTH, HOP_LENGTH)
     frames *= np.hamming(WIN_LENGTH).astype(np.float32)
 
+    # Güç spektrumu
     power_spectrum = np.abs(np.fft.rfft(frames, n=N_FFT)) ** 2
     power_spectrum /= N_FFT
 
+    # Mel filtre bankası + log
     filterbank = build_mel_filterbank(sample_rate, N_FFT, N_MELS)
     mel_energies = np.dot(power_spectrum, filterbank.T)
     mel_energies = np.where(mel_energies == 0, np.finfo(float).eps, mel_energies)
     log_mel_energies = np.log(mel_energies)
 
+    # DCT -> ilk 13 katsayı, zaman ekseni ortalaması
     n_filters = log_mel_energies.shape[1]
     dct_basis = np.cos(
         np.pi
@@ -129,83 +143,56 @@ def extract_mfcc_mean(audio: np.ndarray, sample_rate: int) -> np.ndarray:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate fluent MFCC samples from VoxCeleb WAV files."
+        description="VoxCeleb WAV'larından akıcı MFCC örnekleri üretir."
     )
     parser.add_argument(
         "--source-dir",
         type=Path,
-        default=Path(__file__).resolve().parent / "voxceleb" / "vox1_dev_wav",
-        help="Root directory that contains VoxCeleb WAV files.",
+        default=Path(__file__).resolve().parent.parent / "voxceleb" / "vox1_dev_wav",
+        help="VoxCeleb WAV'larının bulunduğu kök dizin.",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path(__file__).resolve().parent / "fluent_mfcc.csv",
-        help="Output CSV path.",
+        default=Path(__file__).resolve().parent.parent / "data" / "fluent_mfcc.csv",
+        help="Çıktı CSV yolu.",
     )
     parser.add_argument(
         "--target-samples",
         type=int,
         default=3500,
-        help="Number of fluent samples to generate.",
+        help="Üretilecek örnek sayısı.",
     )
     parser.add_argument(
         "--chunk-duration",
         type=float,
         default=3.0,
-        help="Random chunk duration in seconds.",
+        help="Her örnek için rastgele kesit süresi (saniye).",
     )
     parser.add_argument(
         "--sample-rate",
         type=int,
         default=16000,
-        help="Target audio sample rate.",
+        help="Hedef örnekleme hızı.",
     )
     parser.add_argument(
         "--seed",
         type=int,
         default=42,
-        help="Random seed for reproducibility.",
+        help="Tekrarlanabilirlik için rastgele tohum.",
     )
     return parser.parse_args()
 
 
 def find_wav_files(root_dir: Path) -> list[Path]:
     if not root_dir.exists():
-        raise FileNotFoundError(f"Source directory not found: {root_dir}")
+        raise FileNotFoundError(f"Kaynak dizin bulunamadı: {root_dir}")
 
     wav_files = [path for path in root_dir.rglob("*.wav") if path.is_file()]
     if not wav_files:
-        raise FileNotFoundError(f"No .wav files found under: {root_dir}")
+        raise FileNotFoundError(f"Kaynak dizinde .wav dosyası yok: {root_dir}")
 
     return wav_files
-
-
-def extract_mfcc_mean(audio: np.ndarray, sample_rate: int) -> np.ndarray:
-    emphasized = np.append(audio[0], audio[1:] - PRE_EMPHASIS * audio[:-1])
-    frames = frame_audio(emphasized, WIN_LENGTH, HOP_LENGTH)
-    frames *= np.hamming(WIN_LENGTH).astype(np.float32)
-
-    power_spectrum = np.abs(np.fft.rfft(frames, n=N_FFT)) ** 2
-    power_spectrum /= N_FFT
-
-    filterbank = build_mel_filterbank(sample_rate, N_FFT, N_MELS)
-    mel_energies = np.dot(power_spectrum, filterbank.T)
-    mel_energies = np.where(mel_energies == 0, np.finfo(float).eps, mel_energies)
-    log_mel_energies = np.log(mel_energies)
-
-    n_filters = log_mel_energies.shape[1]
-    dct_basis = np.cos(
-        np.pi
-        / n_filters
-        * (np.arange(N_MFCC)[:, None])
-        * (np.arange(n_filters)[None, :] + 0.5)
-    )
-    dct_basis[0] *= 1.0 / np.sqrt(2.0)
-    mfcc = np.dot(log_mel_energies, dct_basis.T)
-    mfcc *= np.sqrt(2.0 / n_filters)
-
-    return mfcc.mean(axis=0)
 
 
 def generate_fluent_samples(
@@ -231,6 +218,7 @@ def generate_fluent_samples(
 
     while len(rows) < target_samples:
         if scanned_files >= len(shuffled_files):
+            # Tüm dosyalar tarandı, başa dön
             shuffled_files = wav_files[:]
             rng.shuffle(shuffled_files)
             scanned_files = 0
@@ -250,15 +238,14 @@ def generate_fluent_samples(
 
         max_start = len(audio) - chunk_samples
         start_sample = rng.randint(0, max_start) if max_start > 0 else 0
-        chunk = audio[start_sample:start_sample + chunk_samples]
+        chunk = audio[start_sample : start_sample + chunk_samples]
 
         if len(chunk) < chunk_samples:
             skipped_short += 1
             continue
 
         mfcc_mean = extract_mfcc_mean(chunk, sample_rate)
-        row = mfcc_mean.tolist() + [0]
-        rows.append(row)
+        rows.append(mfcc_mean.tolist() + [0])
 
         if len(rows) % 100 == 0 or len(rows) == target_samples:
             print(
@@ -272,10 +259,7 @@ def generate_fluent_samples(
 def main() -> None:
     args = parse_args()
 
-    source_dir = args.source_dir.resolve()
-    output_path = args.output.resolve()
-
-    wav_files = find_wav_files(source_dir)
+    wav_files = find_wav_files(args.source_dir.resolve())
     df = generate_fluent_samples(
         wav_files=wav_files,
         target_samples=args.target_samples,
@@ -284,11 +268,11 @@ def main() -> None:
         seed=args.seed,
     )
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(output_path, index=False, quoting=csv.QUOTE_MINIMAL)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(args.output, index=False, quoting=csv.QUOTE_MINIMAL)
 
     print("Tamamlandı.")
-    print(f"Kaydedildi: {output_path}")
+    print(f"Kaydedildi: {args.output}")
     print(f"Oluşturulan örnek sayısı: {len(df)}")
 
 

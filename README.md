@@ -1,80 +1,156 @@
 # Stuttering Detection (Kekemelik Tespiti)
 
-Bu proje, ses verilerinden elde edilen MFCC (Mel-Frequency Cepstral Coefficients) özelliklerini kullanarak kekemelik tespiti yapan bir Makine Öğrenmesi (Machine Learning) modelidir. Bitirme projesi kapsamında geliştirilmiştir ve **SEP-28k** veri setini temel alır.
+Bitirme projesi: ses verilerinden elde edilen 13 MFCC katsayısına bakarak konuşma
+parçalarını **Akıcı (Fluent)** veya **Kekemelik (Stutter)** olarak sınıflandıran
+ML pipeline'ı. **SEP-28k** üzerinde eğitilmiş bir Random Forest modeli +
+FastAPI servisi + GitHub Pages'te yayınlanan React/Vite arayüz.
 
-## 🎯 Proje Amacı
+🔗 Canlı demo: **https://stutter.furkan.software**
 
-Projenin temel amacı, verilen ses kesitlerinin MFCC özelliklerine bakarak, konuşmanın **Akıcı (Fluent)** mı yoksa **Kekemelik (Stutter)** içerip içermediğini sınıflandırmaktır. Bu çalışma, ileride geliştirilecek olan "Anlık Ses ile Kekemelik Tespiti" sisteminin temelini oluşturmaktadır.
+## 📂 Dizin Yapısı
 
-## 📂 Veri Seti
+```
+stutter-detection/
+├── api.py                          # FastAPI: /analyze, /health, CORS
+├── requirements.txt                # Python bağımlılıkları
+├── README.md
+├── .github/workflows/deploy.yml   # GitHub Pages otomatik deploy
+│
+├── frontend/                       # React + Vite + Tailwind (GitHub Pages)
+│
+├── data/                           # CSV veri setleri
+│   ├── sep28k-mfcc.csv             # SEP-28k (temizlenmiş) – sadece MFCC + is_stutter
+│   ├── fluent_mfcc.csv             # VoxCeleb dev setinden üretilen akıcı örnekler
+│   └── balanced_dataset.csv        # 1:1 dengelenmiş nihai eğitim seti
+│
+├── models/                         # Eğitilmiş model artifact'leri
+│   ├── stutter_rf_model.pkl
+│   └── scaler.pkl
+│
+├── scripts/                        # Veri hazırlama + eğitim + CLI demo
+│   ├── prepare_fluent_data.py      # VoxCeleb WAV → MFCC (fluent_mfcc.csv)
+│   ├── merge_datasets.py           # SEP-28k + fluent → balanced_dataset.csv
+│   ├── train_model.py              # Undersampling + StandardScaler + RandomForest
+│   └── live_demo_audio_analyzer.py # Yerel mikrofon CLI demo
+│
+├── archive/                        # Eski denemeler (jüri sunumunda "yol" anlatımı için)
+└── voxceleb/                       # VoxCeleb veri seti (manuel aktarılır)
+```
 
-Bu projede kullanılan veri seti **SEP-28k** (Stuttering Events in Podcasts) veri setinden türetilmiştir. Model, ham ses dosyaları yerine, bu seslerden çıkarılmış **MFCC** özelliklerini kullanır.
+## 🛠️ Kullanılan Teknolojiler
 
-Veri setine aşağıdaki linkten ulaşabilirsiniz:
-🔗 [SEP-28k MFCC Dataset - Kaggle](https://www.kaggle.com/datasets/mitulgargsam/sep28kmfcc/code)
+- **Backend:** FastAPI, Uvicorn, librosa, scikit-learn, joblib, numpy
+- **Frontend:** React 18, Vite 5, Tailwind CSS v4
+- **ML:** 13 MFCC ortalaması, StandardScaler, RandomForestClassifier
+- **Veri:** SEP-28k (kekemelik) + VoxCeleb dev (akıcı, gerçek veriyle dengeleme)
+- **CI/CD:** GitHub Actions → GitHub Pages (özel domain: `stutter.furkan.software`)
 
-**Not:** İndirdiğiniz `sep28k-mfcc.csv` dosyasını projenin ana dizinine atmanız gerekmektedir.
+## 📊 Veri Setleri
 
-## 🛠️ Kullanılan Teknolojiler ve Yöntemler
+| Veri | Amaç | Kaynak |
+|---|---|---|
+| **SEP-28k MFCC** | Kekemelik etiketli (Prolongation, Block, SoundRep, WordRep, Interjection) | [Kaggle: mitulgargsam/sep28kmfcc](https://www.kaggle.com/datasets/mitulgargsam/sep28kmfcc/code) |
+| **VoxCeleb1 dev** | Akıcı konuşma örnekleri (kekemelik etiketi olmayan 3 sn'lik rastgele kesitler) | [Kaggle: abdrafay1/voxceleb](https://www.kaggle.com/datasets/abdrafay1/voxceleb) |
 
-Bu projede aşağıdaki kütüphaneler ve yöntemler kullanılmıştır:
+Yerleşim:
 
-*   **Python 3.x:** Projenin ana programlama dili.
-*   **Pandas:** Veri manipülasyonu, CSV okuma ve veri temizleme işlemleri için.
-*   **NumPy:** Sayısal işlemler ve dizi (array) manipülasyonları için.
-*   **Scikit-Learn:**
-    *   `RandomForestClassifier`: Sınıflandırma modeli olarak kullanılmıştır.
-    *   `train_test_split`: Veriyi eğitim ve test setlerine ayırmak için.
-    *   `Metrics`: Model başarısını ölçmek (Confusion Matrix, Classification Report) için.
-*   **Librosa & PyAudio:** Ses işleme ve kayıt işlemleri için.
-*   **Joblib:** Eğitilen modeli kaydetmek ve yüklemek için.
-*   **Matplotlib & Seaborn:** Sonuçları görselleştirmek için.
+1. SEP-28k CSV'sini `data/sep28k-mfcc.csv` olarak koy.
+2. VoxCeleb1 dev setini `voxceleb/vox1_dev_wav/` altına koy (alt klasörler korunur; `rglob` ile taranır).
 
-## 🚀 Kurulum ve Çalıştırma
-
-1.  Bu projeyi bilgisayarınıza klonlayın veya indirin.
-2.  Sanal bir Python ortamı oluşturun ve gerekli paketleri yükleyin:
+## 🚀 Kurulum
 
 ```bash
+# 1. Repo'yu klonla
+git clone <repo-url>
+cd stutter-detection
+
+# 2. Sanal ortam (Python 3.11)
 python -m venv .venv311
 # Windows
 .venv311\Scripts\activate
-# Linux/MacOS
+# Linux / MacOS
 source .venv311/bin/activate
+
+# 3. Bağımlılıklar
 pip install -r requirements.txt
 ```
 
-**Not:** `pyaudio` kurulumunda hata alırsanız, işletim sisteminize uygun `PyAudio` wheel dosyasını indirip kurmanız gerekebilir veya `pipwin install pyaudio` deneyebilirsiniz.
+`pyaudio` kurulumu Windows'ta bazen hata verir; wheel indirip kurmanız veya
+`pipwin install pyaudio` denemeniz gerekebilir.
 
-3.  `sep28k-mfcc.csv` dosyasını proje ana dizinine yerleştirin.
-
-### Adım 1: Modeli Eğitme
-
-Canlı tespit sistemi `live-detection` klasörü altında çalışmaktadır. Önce bu klasöre girip modeli eğitmelisiniz:
+## 🧪 Veri Hazırlama (bir kez yapılır)
 
 ```bash
-cd live-detection
-.venv311\Scripts\python.exe train_model.py
+# VoxCeleb WAV'larından MFCC çıkar (akıcı veri)
+python scripts/prepare_fluent_data.py
+#   -> data/fluent_mfcc.csv (~3500 örnek)
+
+# İki veri setini dengele ve birleştir
+python scripts/merge_datasets.py
+#   -> data/balanced_dataset.csv (1:1)
 ```
-Bu işlem, ana dizindeki veri setini okuyacak ve `live-detection` klasörü içinde `stutter_rf_model.pkl` ve `scaler.pkl` dosyalarını oluşturacaktır.
 
-### Adım 2: Ses Analizi (Canlı Kayıt)
-
-Model eğitildikten sonra, yine `live-detection` klasörü içindeyken mikrofonunuzu kullanarak analiz yapabilirsiniz:
+## 🎓 Model Eğitimi
 
 ```bash
-python audio_analyzer.py
+python scripts/train_model.py
 ```
-Bu script, varsayılan olarak 10 saniyelik bir ses kaydı alır (kod içinden değiştirilebilir), bunu 3'er saniyelik parçalara böler ve her parça için kekemelik analizi yapar.
 
-## 📊 Çıktılar
+Çıktılar:
 
-*   **Eğitim:** Accuracy, Precision, Recall, F1-Score metrikleri ve grafikler.
-*   **Analiz:** Zaman damgalı (Timestamped) kekemelik çizelgesi. Örn:
-    ```text
-    0.0s - 3.0s   | AKICI           | %85.0
-    3.0s - 6.0s   | KEKEMELİK       | %72.4
-    ```
+- `models/stutter_rf_model.pkl` (~55 MB)
+- `models/scaler.pkl`
+- Konsol: Accuracy, Precision, Recall, F1 raporu
+
+Mevcut performans (Undersampling + threshold 0.625):
+
+| Sınıf | Precision | Recall | F1 |
+|---|---|---|---|
+| Fluent | 0.88 | 0.54 | 0.67 |
+| Stutter | 0.67 | 0.92 | 0.77 |
+| **Accuracy** | | | **0.73** |
+
+## 🌐 API
+
+```bash
+.venv311\Scripts\python.exe api.py
+# -> http://0.0.0.0:8000
+```
+
+Endpoint'ler:
+
+- `GET /` — servis bilgisi (threshold, chunk duration)
+- `GET /health` — model hazır mı?
+- `POST /analyze` — `multipart/form-data: file=<wav>` ile tahmin
+
+CORS: Tüm origin'lere açık (GitHub Pages + ngrok uyumlu). Türkçe karakterler
+UTF-8 ile düz döner (`{"label":"KEKEMELİK",...}`).
+
+## 🖥 Frontend (GitHub Pages)
+
+```bash
+cd frontend
+npm install
+npm run dev      # http://localhost:5173 (lokal geliştirme)
+npm run build    # dist/ çıktısı
+```
+
+Deploy: `main` branch'ine push → GitHub Actions otomatik olarak
+`frontend/dist` üretir, `stutter.furkan.software` domain'ine yayınlar.
+
+İlk açılışta Backend API URL alanına ngrok veya kendi sunucunun URL'ini
+yapıştırman gerekir (localStorage'da saklanır). Mobilde mikrofon erişimi için
+sayfanın HTTPS üzerinden açılması şarttır.
+
+## 🎙 CLI Demo (opsiyonel)
+
+```bash
+python scripts/live_demo_audio_analyzer.py
+```
+
+10 saniyelik mikrofon kaydı alır, `models/stutter_rf_model.pkl` ile
+`/analyze` mantığını (3 sn chunk + MFCC + threshold) uygular ve zaman
+çizelgesini yazdırır. Web arayüzü olmadan hızlı doğrulama içindir.
 
 ## 📝 Lisans
 

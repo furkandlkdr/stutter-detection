@@ -15,13 +15,14 @@ pip-delete-this-directory.txt
 # Veri Setleri (Büyük dosyaları git'e atma)
 *.csv
 *.xlsx
-sep28k-mfcc.csv
+data/
 archive/
 voxceleb/
 
 # Modeller ve Ses Kayıtları
 *.pkl
 *.wav
+models/
 
 # Proje Çıktıları ve Grafikler
 *.png
@@ -36,6 +37,7 @@ saved_models/
 .vscode/
 .idea/
 *.swp
+.memories/
 
 # İşletim Sistemi dosyaları
 .DS_Store

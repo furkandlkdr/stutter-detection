@@ -71,7 +71,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        with:
-          # Özel domain: stutter.furkan.software
-          # GitHub Pages bunu CNAME dosyası olarak kabul eder.
-          cname: stutter.furkan.software

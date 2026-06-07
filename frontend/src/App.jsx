@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-const STORAGE_KEY = 'stutter_api_url'
+// --- Kalıcı ayarlar -------------------------------------------------------
 
-// --- Yardımcılar ----------------------------------------------------------
+const STORAGE_KEY = 'stutter_api_url'
 
 function loadApiUrl() {
   try {
@@ -44,8 +44,9 @@ async function safeReadDetail(response) {
   }
 }
 
-// --- Mikrofon kaydı için Web Audio API yardımcıları -----------------------
-
+// --- Mikrofon kaydı: WAV dönüşümü ----------------------------------------
+// MediaRecorder tarayıcıda webm/ogg/mp4 üretir; backend librosa ise WAV
+// beklediği için burada ses verisini decode edip 16 kHz mono PCM'e çeviriyoruz.
 const TARGET_SAMPLE_RATE = 16000
 
 function pickSupportedMime() {
@@ -62,12 +63,9 @@ function pickSupportedMime() {
   return ''
 }
 
-/** Float32 mono ses verisini 16-bit PCM WAV Blob'una çevirir. */
 function encodeWavMono(float32Samples, sampleRate) {
   const numChannels = 1
   const bitsPerSample = 16
-  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8
-  const blockAlign = (numChannels * bitsPerSample) / 8
   const dataSize = float32Samples.length * 2
   const buffer = new ArrayBuffer(44 + dataSize)
   const view = new DataView(buffer)
@@ -78,20 +76,22 @@ function encodeWavMono(float32Samples, sampleRate) {
     }
   }
 
-  // RIFF header
+  // RIFF başlığı
   writeString(0, 'RIFF')
   view.setUint32(4, 36 + dataSize, true)
   writeString(8, 'WAVE')
-  // fmt subchunk
+  // fmt alt bloğu
   writeString(12, 'fmt ')
-  view.setUint32(16, 16, true) // Subchunk1Size
+  view.setUint32(16, 16, true)
   view.setUint16(20, 1, true) // PCM
   view.setUint16(22, numChannels, true)
   view.setUint32(24, sampleRate, true)
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8
+  const blockAlign = (numChannels * bitsPerSample) / 8
   view.setUint32(28, byteRate, true)
   view.setUint16(32, blockAlign, true)
   view.setUint16(34, bitsPerSample, true)
-  // data subchunk
+  // data alt bloğu
   writeString(36, 'data')
   view.setUint32(40, dataSize, true)
 
@@ -106,15 +106,12 @@ function encodeWavMono(float32Samples, sampleRate) {
   return new Blob([view], { type: 'audio/wav' })
 }
 
-/** MediaRecorder çıktısını 16 kHz mono PCM WAV'a çevirir. */
 async function blobToMonoWav(blob) {
   const arrayBuffer = await blob.arrayBuffer()
-  // OfflineAudioContext ile decode + resample + mono mixdown
   const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext
   if (!Ctx) {
     throw new Error('Tarayıcı OfflineAudioContext desteklemiyor.')
   }
-  // Önce geçici context ile decode et
   const tempCtx = new (window.AudioContext || window.webkitAudioContext)()
   let decoded
   try {
@@ -122,15 +119,20 @@ async function blobToMonoWav(blob) {
   } finally {
     tempCtx.close().catch(() => {})
   }
-  const offline = new Ctx(1, Math.ceil(decoded.duration * TARGET_SAMPLE_RATE), TARGET_SAMPLE_RATE)
+  const offline = new Ctx(
+    1,
+    Math.ceil(decoded.duration * TARGET_SAMPLE_RATE),
+    TARGET_SAMPLE_RATE
+  )
   const source = offline.createBufferSource()
   source.buffer = decoded
   source.connect(offline.destination)
   source.start(0)
   const rendered = await offline.startRendering()
-  const wavBlob = encodeWavMono(rendered.getChannelData(0), rendered.sampleRate)
-  return wavBlob
+  return encodeWavMono(rendered.getChannelData(0), rendered.sampleRate)
 }
+
+// --- Ana bileşen ----------------------------------------------------------
 
 export default function App() {
   const [apiUrl, setApiUrl] = useState(loadApiUrl)
@@ -139,22 +141,21 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
-
-  // Sağlık kontrolü
   const [health, setHealth] = useState({ state: 'idle', message: '' })
 
-  // Mikrofon kaydı
+  // Mikrofon kaydı state'leri
   const [isRecording, setIsRecording] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [converting, setConverting] = useState(false)
   const [micError, setMicError] = useState('')
   const [isSecure, setIsSecure] = useState(true)
+  const [liveLevels, setLiveLevels] = useState([])
+
   const recorderRef = useRef(null)
   const chunksRef = useRef([])
   const streamRef = useRef(null)
   const tickRef = useRef(null)
   const startedAtRef = useRef(0)
-  // Canlı waveform için
   const audioCtxRef = useRef(null)
   const analyserRef = useRef(null)
   const animRef = useRef(null)
@@ -165,7 +166,7 @@ export default function App() {
     saveApiUrl(apiUrl)
   }, [apiUrl])
 
-  // URL kaydedildiğinde sağlık kontrolü tetikle
+  // URL kaydedilince backend sağlık kontrolü
   useEffect(() => {
     if (!effectiveUrl) {
       setHealth({ state: 'idle', message: '' })
@@ -193,7 +194,7 @@ export default function App() {
         } else {
           setHealth({ state: 'error', message: `HTTP ${res.status}` })
         }
-      } catch (err) {
+      } catch {
         if (cancelled) return
         setHealth({ state: 'error', message: 'Sunucuya ulaşılamıyor' })
       }
@@ -204,7 +205,7 @@ export default function App() {
     }
   }, [effectiveUrl])
 
-  // Kayıt sayaç temizliği
+  // Sayfa kapanırken medya stream'i serbest bırak
   useEffect(() => {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current)
@@ -214,7 +215,21 @@ export default function App() {
     }
   }, [])
 
-  // --- Dosya seçimi / sürükle-bırak -------------------------------------
+  // HTTPS / localhost kontrolü — mobil mikrofon erişimi için gerekli
+  useEffect(() => {
+    try {
+      const secure =
+        window.isSecureContext === true ||
+        window.location.protocol === 'https:' ||
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1'
+      setIsSecure(secure)
+    } catch {
+      setIsSecure(false)
+    }
+  }, [])
+
+  // --- Dosya seçimi -------------------------------------------------------
 
   const onFileChange = (event) => {
     setFile(event.target.files?.[0] || null)
@@ -239,25 +254,10 @@ export default function App() {
     setApiUrl(urlDraft.trim())
   }
 
-  // --- Mikrofon kaydı ---------------------------------------------------
+  // --- Canlı waveform -----------------------------------------------------
 
-  // Sayfa yüklenirken güvenli bağlam kontrolü (telefon/LAN için kritik)
-  useEffect(() => {
-    try {
-      const secure =
-        window.isSecureContext === true ||
-        window.location.protocol === 'https:' ||
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1'
-      setIsSecure(secure)
-    } catch {
-      setIsSecure(false)
-    }
-  }, [])
-
-  // Canlı waveform callback'i: AnalyserNode'dan peak değerleri alıp state'e yazar
-  const [liveLevels, setLiveLevels] = useState([])
-
+  // AnalyserNode ile mikrofonun time-domain verisinden peak hesaplayıp
+  // 60 frame'lik yığına ekliyoruz (kayıt sırasında mobilde büyüyen simge).
   const startLiveWaveform = (stream) => {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext
@@ -274,7 +274,6 @@ export default function App() {
       const loop = () => {
         if (!analyserRef.current) return
         analyser.getByteTimeDomainData(buffer)
-        // Time-domain'den peak hesapla (0..1)
         let peak = 0
         for (let i = 0; i < buffer.length; i++) {
           const v = Math.abs((buffer[i] - 128) / 128)
@@ -282,7 +281,6 @@ export default function App() {
         }
         setLiveLevels((prev) => {
           const next = [...prev, Math.min(1, peak)]
-          // Son 60 değeri tut
           return next.length > 60 ? next.slice(-60) : next
         })
         animRef.current = requestAnimationFrame(loop)
@@ -294,16 +292,16 @@ export default function App() {
   }
 
   const stopLiveWaveform = () => {
-    if (animRef.current) {
-      cancelAnimationFrame(animRef.current)
-      animRef.current = null
-    }
+    if (animRef.current) cancelAnimationFrame(animRef.current)
+    animRef.current = null
     analyserRef.current = null
     if (audioCtxRef.current) {
       audioCtxRef.current.close().catch(() => {})
       audioCtxRef.current = null
     }
   }
+
+  // --- Mikrofon kaydı ----------------------------------------------------
 
   const startRecording = async () => {
     if (isRecording) return
@@ -312,7 +310,6 @@ export default function App() {
     setResult(null)
     setLiveLevels([])
 
-    // 1) Tarayıcı desteği
     if (
       !navigator.mediaDevices ||
       typeof navigator.mediaDevices.getUserMedia !== 'function'
@@ -328,12 +325,11 @@ export default function App() {
       return
     }
 
-    // 2) Güvenli bağlam uyarısı (bazı mobil tarayıcılar için kritik)
     if (!isSecure) {
-      const msg =
+      setMicError(
         'Bu sayfa güvenli (HTTPS) bağlamda değil. Mobil tarayıcılar mikrofonu ' +
-        'sadece https:// adreslerinde açarlar. Lütfen ngrok veya GitHub Pages üzerinden gir.'
-      setMicError(msg)
+          'sadece https:// adreslerinde açarlar. Lütfen ngrok veya GitHub Pages üzerinden gir.'
+      )
       // Yine de deneyelim — bazı cihazlar izin verebilir
     }
 
@@ -346,8 +342,6 @@ export default function App() {
         },
       })
       streamRef.current = stream
-
-      // Canlı waveform
       startLiveWaveform(stream)
 
       const mimeType = pickSupportedMime()
@@ -365,7 +359,6 @@ export default function App() {
         })
         try {
           setConverting(true)
-          // webm/ogg/mp4 -> 16 kHz mono PCM WAV (backend ile birebir uyumlu)
           const wavBlob = await blobToMonoWav(rawBlob)
           const recordedFile = new File(
             [wavBlob],
@@ -407,13 +400,11 @@ export default function App() {
       } else if (err && err.name === 'NotFoundError') {
         detail = 'Cihazda kullanılabilir mikrofon bulunamadı.'
       } else if (err && err.name === 'NotReadableError') {
-        detail =
-          'Mikrofon başka bir uygulama tarafından kullanılıyor olabilir.'
+        detail = 'Mikrofon başka bir uygulama tarafından kullanılıyor olabilir.'
       } else if (err && err.name === 'OverconstrainedError') {
         detail = 'Mikrofon, istenen özellikleri karşılamıyor.'
       } else if (err && err.name === 'SecurityError') {
-        detail =
-          'Güvenlik nedeniyle erişim reddedildi. Sayfayı HTTPS üzerinden açın.'
+        detail = 'Güvenlik nedeniyle erişim reddedildi. Sayfayı HTTPS üzerinden açın.'
       }
       const msg = 'Mikrofona erişilemedi: ' + detail
       setMicError(msg)
@@ -435,11 +426,11 @@ export default function App() {
     setIsRecording(false)
   }
 
-  // --- Analiz -----------------------------------------------------------
+  // --- Analiz isteği -----------------------------------------------------
 
   const analyze = async () => {
     if (!effectiveUrl) {
-      setError('Lütfen önce Backend API URL\'ini girin.')
+      setError("Lütfen önce Backend API URL'ini girin.")
       return
     }
     if (!file) {
@@ -529,7 +520,7 @@ function Header() {
     <header className="mb-8 text-center">
       <div className="inline-flex items-center gap-3 rounded-full border border-blue-100 bg-white/70 px-4 py-1.5 text-xs font-medium text-blue-700 shadow-sm">
         <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
-        Stutter Detection · Nafair - 2026
+        Stutter Detection · <a href="https://furkan.software" target="_blank" rel="noreferrer">Nafair</a> - 2026
       </div>
       <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
         Kekemelik Analiz Sistemi
@@ -582,10 +573,7 @@ function ApiUrlCard({ urlDraft, setUrlDraft, onSubmit, health }) {
       className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur"
     >
       <div className="flex items-center justify-between gap-2">
-        <label
-          htmlFor="api-url"
-          className="block text-sm font-semibold text-slate-800"
-        >
+        <label htmlFor="api-url" className="block text-sm font-semibold text-slate-800">
           Backend API URL
         </label>
         <HealthBadge health={health} />
@@ -628,18 +616,14 @@ function RecorderBar({
   isSecure,
   micError,
 }) {
-  // Canlı peak (0..1) — mikrofon ikonunu büyütmek için
+  // Son peak değerine göre mikrofon ikonunu büyüt (mobilde fark edilir pulse)
   const latestPeak =
-    liveLevels && liveLevels.length > 0
-      ? liveLevels[liveLevels.length - 1]
-      : 0
-  // 1 -> 1, 0 -> 0.85 arası ölçek; mobil için fark edilir bir pulse hissi
+    liveLevels && liveLevels.length > 0 ? liveLevels[liveLevels.length - 1] : 0
   const micScale = isRecording ? 0.85 + Math.min(1, latestPeak) * 0.5 : 1
 
   return (
     <section className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur">
       <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:justify-between">
-        {/* Sol: durum göstergesi */}
         <div className="flex w-full items-center gap-3 sm:w-auto">
           <div
             className={`flex h-12 w-12 items-center justify-center rounded-full text-2xl transition-transform duration-75 ${
@@ -656,7 +640,7 @@ function RecorderBar({
           <div className="min-w-0">
             <div className="text-sm font-semibold text-slate-800">
               {converting
-                ? 'WAV\'a dönüştürülüyor…'
+                ? "WAV'a dönüştürülüyor…"
                 : isRecording
                 ? 'Kayıt Yapılıyor…'
                 : hasFile
@@ -673,7 +657,6 @@ function RecorderBar({
           </div>
         </div>
 
-        {/* Sağ / mobil: ortalı tam genişlik buton */}
         <div className="flex w-full items-center sm:w-auto">
           {isRecording ? (
             <button
@@ -698,7 +681,7 @@ function RecorderBar({
         </div>
       </div>
 
-      {/* Güvenlik uyarısı — sadece mobil/HTTP bağlantılarda göster */}
+      {/* Mobil/HTTP bağlantılarında mikrofon erişim uyarısı */}
       {!isSecure && !isRecording && !converting && (
         <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           ⚠️ Sayfa güvenli (HTTPS) bağlamda değil. Telefondan mikrofona erişmek
@@ -707,14 +690,13 @@ function RecorderBar({
         </div>
       )}
 
-      {/* Canlı waveform sadece masaüstünde ve kayıt sırasında */}
+      {/* Dalga formu sadece masaüstünde */}
       {(isRecording || converting) && (
         <div className="mt-3 hidden sm:block">
           <LiveWaveform levels={liveLevels} active={isRecording} />
         </div>
       )}
 
-      {/* Mikrofon hata detayı */}
       {micError && !isRecording && (
         <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
           {micError}
@@ -724,13 +706,9 @@ function RecorderBar({
   )
 }
 
-/**
- * Kayıt sırasında son 60 peak seviyesini yan yana dikey çubuklar olarak çizer.
- * Aktifken pembe-kırmızı geçiş, pasifken (dönüşüm anı) gri.
- */
 function LiveWaveform({ levels, active }) {
   const bars = levels && levels.length > 0 ? levels : []
-  const placeholders = Array.from({ length: 60 }, (_, i) => 0)
+  const placeholders = Array.from({ length: 60 }, () => 0)
 
   return (
     <div className="relative h-12 w-full overflow-hidden rounded-md bg-slate-50">
@@ -943,7 +921,11 @@ function ResultsView({ result }) {
         />
       </div>
 
-      <Timeline totalDuration={total_duration} chunks={chunks || []} waveform={result.waveform || []} />
+      <Timeline
+        totalDuration={total_duration}
+        chunks={chunks || []}
+        waveform={result.waveform || []}
+      />
 
       <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur">
         <h3 className="text-sm font-semibold text-slate-800">Parça Listesi</h3>
@@ -993,16 +975,14 @@ function Timeline({ totalDuration, chunks, waveform }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-800">
-          Yatay Zaman Çizelgesi
-        </h3>
+        <h3 className="text-sm font-semibold text-slate-800">Yatay Zaman Çizelgesi</h3>
         <span className="text-xs font-mono text-slate-500">
           {safeDuration.toFixed ? safeDuration.toFixed(2) : safeDuration} sn
         </span>
       </div>
 
       <div className="relative">
-        {/* Segment bar (renkli) */}
+        {/* Üstte: chunk label'larına göre renklenen segment bar */}
         <div className="h-8 w-full overflow-hidden rounded-lg bg-slate-100">
           <div className="flex h-full w-full">
             {segments.length === 0 && (
@@ -1036,7 +1016,7 @@ function Timeline({ totalDuration, chunks, waveform }) {
           </div>
         </div>
 
-        {/* Waveform bar */}
+        {/* Altta: ses dalgası (waveform) — renkler segment'lere göre */}
         <div className="mt-2">
           <WaveformBar
             values={waveform || []}
@@ -1045,7 +1025,6 @@ function Timeline({ totalDuration, chunks, waveform }) {
           />
         </div>
 
-        {/* Tick labels */}
         <div className="mt-1 flex justify-between text-[10px] font-mono text-slate-400">
           <span>0.0 sn</span>
           <span>{(safeDuration / 2).toFixed(1)} sn</span>
@@ -1067,10 +1046,8 @@ function Timeline({ totalDuration, chunks, waveform }) {
   )
 }
 
-/**
- * Yatay ses dalgası. 60 çubukluk peak değerlerini chunk label'larına göre
- * renklendirir; segment sınırları dikey çizgi ile vurgulanır.
- */
+// Ses dalgası: 60 çubukluk peak değerlerini chunk label'larına göre renklendirir;
+// segment sınırları dikey ince çizgiyle gösterilir.
 function WaveformBar({ values, segments, totalDuration }) {
   if (!values || values.length === 0) {
     return (
@@ -1082,20 +1059,16 @@ function WaveformBar({ values, segments, totalDuration }) {
 
   const N = values.length
   const safeDur = totalDuration > 0 ? totalDuration : 1
-  // Hangi segment bu çubuğa düşüyor?
   const colorForIndex = (idx) => {
     if (!segments || segments.length === 0) return 'bg-slate-300'
     const t = (idx / N) * safeDur
     for (const seg of segments) {
       if (t >= seg.start && t < seg.end) {
-        return seg.label === 'KEKEMELİK'
-          ? 'bg-red-400/80'
-          : 'bg-emerald-400/80'
+        return seg.label === 'KEKEMELİK' ? 'bg-red-400/80' : 'bg-emerald-400/80'
       }
     }
     return 'bg-slate-300'
   }
-  // Segment sınırları (dikey çizgi konumları)
   const boundaryPcts = (segments || [])
     .slice(1)
     .map((s) => (s.start / safeDur) * 100)
@@ -1110,16 +1083,11 @@ function WaveformBar({ values, segments, totalDuration }) {
             <div
               key={i}
               className={`flex-1 rounded-sm ${colorForIndex(i)} transition`}
-              style={{
-                height: `${heightPct}%`,
-                minHeight: '2px',
-                opacity: 0.85,
-              }}
+              style={{ height: `${heightPct}%`, minHeight: '2px', opacity: 0.85 }}
             />
           )
         })}
       </div>
-      {/* Segment sınırları */}
       {boundaryPcts.map((pct, i) => (
         <div
           key={`bnd-${i}`}
