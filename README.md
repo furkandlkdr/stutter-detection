@@ -26,8 +26,6 @@ Bu projede aşağıdaki kütüphaneler ve yöntemler kullanılmıştır:
     *   `RandomForestClassifier`: Sınıflandırma modeli olarak kullanılmıştır.
     *   `train_test_split`: Veriyi eğitim ve test setlerine ayırmak için.
     *   `Metrics`: Model başarısını ölçmek (Confusion Matrix, Classification Report) için.
-*   **Imbalanced-Learn (SMOTE):**
-    *   Veri setindeki sınıf dengesizliğini gidermek için **SMOTE (Synthetic Minority Over-sampling Technique)** kullanılmıştır. Bu yöntem, azınlık sınıfını sentetik olarak çoğaltarak modelin yanlı (biased) öğrenmesini engeller.
 *   **Librosa & PyAudio:** Ses işleme ve kayıt işlemleri için.
 *   **Joblib:** Eğitilen modeli kaydetmek ve yüklemek için.
 *   **Matplotlib & Seaborn:** Sonuçları görselleştirmek için.
@@ -38,7 +36,7 @@ Bu projede aşağıdaki kütüphaneler ve yöntemler kullanılmıştır:
 2.  Gerekli Python kütüphanelerini yükleyin:
 
 ```bash
-pip install pandas numpy matplotlib seaborn scikit-learn imbalanced-learn librosa pyaudio joblib
+pip install pandas numpy matplotlib seaborn scikit-learn librosa pyaudio joblib fastapi uvicorn
 ```
 
 **Not:** `pyaudio` kurulumunda hata alırsanız, işletim sisteminize uygun `PyAudio` wheel dosyasını indirip kurmanız gerekebilir veya `pipwin install pyaudio` deneyebilirsiniz.

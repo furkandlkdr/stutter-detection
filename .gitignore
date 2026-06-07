@@ -16,6 +16,7 @@ pip-delete-this-directory.txt
 *.xlsx
 sep28k-mfcc.csv
 archive/
+voxceleb/
 
 # Modeller ve Ses Kayıtları
 *.pkl

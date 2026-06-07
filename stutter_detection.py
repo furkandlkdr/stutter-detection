@@ -6,14 +6,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
-# SMOTE kütüphanesi kontrolü
-try:
-    from imblearn.over_sampling import SMOTE
-except ImportError:
-    print("HATA: 'imbalanced-learn' kütüphanesi bulunamadı.")
-    print("Lütfen terminalde şu komutu çalıştırın: pip install imbalanced-learn")
-    exit()
-
 # 1. VERİ YÜKLEME VE TEMİZLEME
 print("1. Veri Yükleniyor ve Temizleniyor...")
 try:
@@ -68,25 +60,16 @@ print("\n4. Train/Test Ayrımı Yapılıyor (%80 Train, %20 Test)...")
 # Stratify=y diyerek her iki sette de oranların korunmasını sağlıyoruz (ilk başta)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-print(f"   Eğitim Seti Boyutu (SMOTE öncesi): {X_train.shape}")
+print(f"   Eğitim Seti Boyutu: {X_train.shape}")
 print(f"   Test Seti Boyutu: {X_test.shape}")
 
-# 5. VERİ DENGELEME (SMOTE)
-print("\n5. SMOTE ile Eğitim Verisi Dengeleniyor...")
-# SMOTE sadece eğitim setine uygulanır! Test setine dokunulmaz (Data Leakage önlemek için).
-smote = SMOTE(random_state=42)
-X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
-
-print(f"   Eğitim Seti Boyutu (SMOTE sonrası): {X_train_resampled.shape}")
-print(f"   Yeni Sınıf Dağılımı (Train): {pd.Series(y_train_resampled).value_counts().to_dict()}")
-
-# 6. MODELLEME (RANDOM FOREST)
-print("\n6. Random Forest Modeli Eğitiliyor...")
+# 5. MODELLEME (RANDOM FOREST)
+print("\n5. Random Forest Modeli Eğitiliyor...")
 rf_model = RandomForestClassifier(n_estimators=200, max_depth=None, random_state=42, n_jobs=-1)
-rf_model.fit(X_train_resampled, y_train_resampled)
+rf_model.fit(X_train, y_train)
 
-# 7. RAPORLAMA
-print("\n7. Raporlama ve Görselleştirme...")
+# 6. RAPORLAMA
+print("\n6. Raporlama ve Görselleştirme...")
 
 # Tahminler
 y_pred = rf_model.predict(X_test)

@@ -1,0 +1,10 @@
+pandas
+numpy
+scikit-learn
+librosa
+pyaudio
+joblib
+matplotlib
+seaborn
+fastapi
+uvicorn
