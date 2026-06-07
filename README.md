@@ -33,10 +33,15 @@ Bu projede aşağıdaki kütüphaneler ve yöntemler kullanılmıştır:
 ## 🚀 Kurulum ve Çalıştırma
 
 1.  Bu projeyi bilgisayarınıza klonlayın veya indirin.
-2.  Gerekli Python kütüphanelerini yükleyin:
+2.  Sanal bir Python ortamı oluşturun ve gerekli paketleri yükleyin:
 
 ```bash
-pip install pandas numpy matplotlib seaborn scikit-learn librosa pyaudio joblib fastapi uvicorn
+python -m venv .venv311
+# Windows
+.venv311\Scripts\activate
+# Linux/MacOS
+source .venv311/bin/activate
+pip install -r requirements.txt
 ```
 
 **Not:** `pyaudio` kurulumunda hata alırsanız, işletim sisteminize uygun `PyAudio` wheel dosyasını indirip kurmanız gerekebilir veya `pipwin install pyaudio` deneyebilirsiniz.
@@ -49,7 +54,7 @@ Canlı tespit sistemi `live-detection` klasörü altında çalışmaktadır. Ön
 
 ```bash
 cd live-detection
-python train_model.py
+.venv311\Scripts\python.exe train_model.py
 ```
 Bu işlem, ana dizindeki veri setini okuyacak ve `live-detection` klasörü içinde `stutter_rf_model.pkl` ve `scaler.pkl` dosyalarını oluşturacaktır.
 

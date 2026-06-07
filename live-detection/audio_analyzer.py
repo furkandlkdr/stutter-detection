@@ -62,7 +62,7 @@ class AudioRecorder:
         return filename
 
 class StutterDetector:
-    def __init__(self, model_path='stutter_rf_model.pkl', scaler_path='scaler.pkl'):
+    def __init__(self, model_path='stutter_rf_model.pkl', scaler_path='scaler.pkl', threshold=0.625):
         """
         Eğitilmiş modeli ve scaler'ı yükler.
         """
@@ -73,7 +73,9 @@ class StutterDetector:
         self.model = joblib.load(model_path)
         self.scaler = joblib.load(scaler_path)
         self.sample_rate = 16000 # Model eğitimi ve analiz için standart SR (SEP-28k)
-        print("   Model yüklendi.")
+        # Kekemelik kararı için eşik değeri (Fluent F1'i maksimize eden değer)
+        self.threshold = threshold
+        print(f"   Model yüklendi (threshold={self.threshold}).")
 
     def extract_features(self, y, sr):
         """
@@ -130,9 +132,19 @@ class StutterDetector:
             features_scaled = self.scaler.transform(features.reshape(1, -1))
             
             # Tahmin
-            prediction = self.model.predict(features_scaled)[0]
+            # Tahmin ve Eşik (Threshold) Ayarı
             probs = self.model.predict_proba(features_scaled)[0]
-            confidence = probs[prediction] # Tahmin edilen sınıfın olasılığı
+            
+            # probs[1], sesin Kekemelik (1) olma olasılığıdır.
+            # Eşik 0.625 (Fluent F1'i maksimize eden değer)
+            stutter_threshold = self.threshold
+            
+            if probs[1] > stutter_threshold:
+                prediction = 1
+                confidence = probs[1]
+            else:
+                prediction = 0
+                confidence = probs[0]
             
             # Zaman damgaları
             start_time = i / sr

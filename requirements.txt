@@ -1,9 +1,10 @@
-pandas
-numpy
-scikit-learn
+pandas==2.2.3
+numpy==1.26.4
+scipy==1.14.1
+scikit-learn==1.5.2
+joblib==1.5.3
 librosa
 pyaudio
-joblib
 matplotlib
 seaborn
 fastapi

@@ -1,37 +1,12 @@
 import pandas as pd
 import joblib
 from pathlib import Path
-import sys
-import types
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATASET_PATH = ROOT_DIR / "balanced_dataset.csv"
 
-
-def install_scipy_propack_shim() -> None:
-    shim = types.ModuleType("scipy.sparse.linalg._propack")
-
-    def _stub(*args, **kwargs):
-        raise NotImplementedError("SciPy PROPACK shim is only for import compatibility.")
-
-    class _PropackNamespace:
-        def __getattr__(self, name):
-            return _stub
-
-    propack_namespace = _PropackNamespace()
-
-    def _module_getattr(name: str):
-        if name in {"_spropack", "_dpropack", "_cpropack", "_zpropack"}:
-            return propack_namespace
-        return _stub
-
-    shim.__getattr__ = _module_getattr
-    sys.modules["scipy.sparse.linalg._propack"] = shim
-
 def train_and_save_model():
-    install_scipy_propack_shim()
-
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.metrics import accuracy_score, classification_report
     from sklearn.model_selection import train_test_split
@@ -44,6 +19,26 @@ def train_and_save_model():
 
     df = pd.read_csv(DATASET_PATH)
     print(f"   Veri seti yüklendi: {DATASET_PATH}")
+
+    # Undersampling: çoğunluk sınıfını azınlık sınıfına eşitle
+    fluent_df = df[df['is_stutter'] == 0]
+    stutter_df = df[df['is_stutter'] == 1]
+
+    fluent_count = len(fluent_df)
+    stutter_count = len(stutter_df)
+    print(f"   Orijinal dağılım: Fluent={fluent_count}, Stutter={stutter_count}")
+
+    # Stutter sayısını Fluent sayısına eşitle
+    if stutter_count > fluent_count:
+        stutter_df = stutter_df.sample(n=fluent_count, random_state=42)
+    else:
+        fluent_df = fluent_df.sample(n=stutter_count, random_state=42)
+
+    df = pd.concat([fluent_df, stutter_df], ignore_index=True)
+    df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    print("   Eşitlenmiş Veri Dağılımı:")
+    print(df['is_stutter'].value_counts().sort_index().to_string(header=False))
 
     print("2. Özellikler Seçiliyor...")
     mfcc_features = [str(i) for i in range(13)]
@@ -61,7 +56,7 @@ def train_and_save_model():
 
     # Modelleme
     print("4. Random Forest Modeli Eğitiliyor...")
-    rf_model = RandomForestClassifier(n_estimators=200, max_depth=None, random_state=42, n_jobs=-1)
+    rf_model = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
     rf_model.fit(X_train_scaled, y_train)
 
     # Test
