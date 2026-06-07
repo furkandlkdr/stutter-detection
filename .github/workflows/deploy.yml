@@ -1,0 +1,75 @@
+name: Deploy Frontend to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Aynı branch'te aynı anda yalnız bir deploy çalışsın
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          # Eğer package-lock.json henüz repoya eklenmediyse workflow
+          # yine de çalışsın; sadece cache atlanır.
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify build output
+        working-directory: frontend
+        run: |
+          if [ ! -f dist/index.html ]; then
+            echo "❌ dist/index.html üretilmedi — build başarısız görünüyor."
+            exit 1
+          fi
+          echo "✅ dist/index.html bulundu. Build çıktısı:"
+          ls -la dist
+
+      - run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          # Özel domain: stutter.furkan.software
+          # GitHub Pages bunu CNAME dosyası olarak kabul eder.
+          cname: stutter.furkan.software
