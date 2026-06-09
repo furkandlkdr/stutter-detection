@@ -495,6 +495,7 @@ export default function App() {
           onDrop={onDrop}
           onDragOver={onDragOver}
           onAnalyze={analyze}
+          onClear={() => setFile(null)}
           loading={loading}
           disabled={!effectiveUrl}
         />
@@ -741,6 +742,7 @@ function UploadCard({
   onDrop,
   onDragOver,
   onAnalyze,
+  onClear,
   loading,
   disabled,
 }) {
@@ -773,9 +775,7 @@ function UploadCard({
       <div className="mt-4 flex flex-col-reverse items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
         {file && !loading && (
           <button
-            type="button"
-            onClick={() => {
-              setFile(null)
+            type="butonClear setFile(null)
             }}
             className="inline-flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 sm:w-auto sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:shadow-none sm:hover:bg-transparent sm:hover:underline sm:hover:underline-offset-2"
           >
