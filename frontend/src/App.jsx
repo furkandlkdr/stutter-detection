@@ -521,7 +521,7 @@ function Header() {
     <header className="mb-8 text-center">
       <div className="inline-flex items-center gap-3 rounded-full border border-blue-100 bg-white/70 px-4 py-1.5 text-xs font-medium text-blue-700 shadow-sm">
         <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
-        Stutter Detection · <a href="https://furkan.software" target="_blank" rel="noreferrer">Nafair</a> - 2026
+        Stutter Detection · <a href="https://furkan.software" target="_blank" rel="noreferrer">Nafair</a> · 2026
       </div>
       <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
         Kekemelik Analiz Sistemi

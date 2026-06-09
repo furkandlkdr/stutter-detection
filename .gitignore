@@ -25,11 +25,6 @@ voxceleb/
 models/
 
 # Proje Çıktıları ve Grafikler
-*.png
-*.jpg
-*.jpeg
-training_history.png
-confusion_matrix.png
 model_checkpoints/
 saved_models/
 
